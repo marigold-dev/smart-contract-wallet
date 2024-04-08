@@ -1,0 +1,21 @@
+{
+  "name": "session-wallet",
+  "version": "0.0.1",
+  "dependencies": {
+    "ligo-breathalyzer": "1.7.0",
+    "@ligo/fa": "1.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:aguillon/session-wallet"
+  },
+  "author": "Arthur Guillon",
+  "main": "src/main.mligo",
+  "license": "MIT",
+  "description": "N/A",
+  "keywords": [
+    "tezos",
+    "ligo",
+    "account abstraction"
+  ]
+}
