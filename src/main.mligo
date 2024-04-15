@@ -33,13 +33,6 @@ let assert_owner (storage: storage) =   (* TODO check if annotation mandatory *)
 let key_to_address (pk: key): address =
   Tezos.address (Tezos.implicit_account (Crypto.hash_key pk))
 
-(* REMOVE ME? *)
-[@inline]
-let deserialize (packed_ops: bytes) : operation list =
-  match (Bytes.unpack packed_ops: user_action option) with
-    | None -> failwith "Wrong serialized operations"
-    | Some ops_f -> ops_f ()
-
 [@entry]
 let set_filter
   (k, f, t: key * user_filter * timestamp)
@@ -52,13 +45,15 @@ let set_filter
   in
   [], storage
 
+(* This entrypoint may be called by a different sender than the owner, hence
+   the session key must be part of the signed bytes *)
 [@entry]
 let set_filter_with_signature
-  (registry_key, owner_key, packed_filter, s: key * key * bytes * signature)
+  (owner_key, packed_filter, s: key * bytes * signature)
   (storage: storage): operation list * storage =
-  match (Bytes.unpack packed_filter: (user_filter * timestamp) option) with
+  match (Bytes.unpack packed_filter: (key * user_filter * timestamp) option) with
     | None -> failwith "Wrong bytes"
-    | Some (f, t) ->
+    | Some (session_key, f, t) ->
       if not (Crypto.check owner_key s packed_filter) then
         failwith "Wrong signature"
       else if key_to_address owner_key <> storage.owner then
@@ -66,7 +61,7 @@ let set_filter_with_signature
       else
         let storage = {
           storage with
-            registry = Big_map.add registry_key (f, t) storage.registry;
+            registry = Big_map.add session_key (f, t) storage.registry;
         }
         in
         [], storage
@@ -91,7 +86,5 @@ let relay_check
 (* Directly relay a lambda from the user. *)
 [@entry]
 let relay_direct (user_action: user_action) (storage: storage): operation list * storage =
-  if Tezos.get_sender () <> storage.owner then
-    failwith "Only the smart contract owner can call this entrypoint"
-  else
-    user_action (), storage
+  let _ = assert_owner storage in
+  user_action (), storage
