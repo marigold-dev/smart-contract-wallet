@@ -51,6 +51,10 @@ module Ex2 = struct
         let contract = (Tezos.get_contract addr: entrypoints contract) in
         [Tezos.transaction entry (n * 1mutez) contract]
 
+  let user_direct addr () =
+    let contract = (Tezos.get_contract addr: entrypoints contract) in
+    [Tezos.transaction (Bar 5) 0tez contract]
+
   let make_bytes1 (contract: entrypoints contract) =
     let address = Tezos.address contract in
     Bytes.pack [(address, Foo "foo", 0n)]
@@ -203,7 +207,6 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
         B.Assert.is_equal "storage has not been modified" storage 0
       ]);
 
-  (* Buggy? See https://gitlab.com/ligolang/ligo/-/issues/2175
   B.Model.case
     "relay_direct"
     "succeeds when called by the owner of the wallet"
@@ -214,14 +217,10 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
         B.Context.call_as
           owner
           sc_wallet
-          (Relay_direct
-            (fun () ->
-              Ex2.call_contract example_contract.originated_address
-            ));
+          (Relay_direct (Ex2.user_direct example_contract.originated_address));
         let storage = B.Contract.storage_of example_contract in
-        B.Assert.is_equal "storage has been modified" storage 1
+        B.Assert.is_equal "storage has been modified" storage (-1)
       ]);
-  *)
 
 ]
 
