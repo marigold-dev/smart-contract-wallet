@@ -2,16 +2,11 @@
 #import "../src/main.mligo" "Main"
 
 let originate_empty level owner =
-  let empty_storage: Main.storage = {
-    owner = owner;
-    registry = Big_map.empty;
-  }
-  in
   B.Contract.originate
     level
     "session_contract"
     (contract_of Main)
-    empty_storage
+    (Main.empty_storage owner)
     (0tez)
 
 let init level =
@@ -19,7 +14,7 @@ let init level =
   let contract = originate_empty level owner.address in
   owner, other, contract
 
-let lambda1 : Main.user_filter = fun _ -> []
+let lambda1 : Main.user_condition = fun _ -> fun x -> [], x
 
 module Ex2 = struct
   module Contract = struct
@@ -43,13 +38,13 @@ module Ex2 = struct
 
   let foo s = Foo s
 
-  let user_condition bytes =
+  let user_condition bytes (storage: bytes) =
     match (Bytes.unpack bytes: (address * entrypoints * nat) list option) with
       | None -> failwith "big mistake"
       | Some serialized_ops ->
         let (addr, entry, n) = hd serialized_ops in
         let contract = (Tezos.get_contract addr: entrypoints contract) in
-        [Tezos.transaction entry (n * 1mutez) contract]
+        [Tezos.transaction entry (n * 1mutez) contract], storage
 
   let make_bytes1 (contract: entrypoints contract) =
     let address = Tezos.address contract in
@@ -75,8 +70,8 @@ let new (() : unit) =
 
 let suite = B.Model.suite "Suite for Ligo wallet sessions" [
   B.Model.case
-    "set_filter"
-    "registers a filter and a session key"
+    "set_condition"
+    "registers a condition and a session key"
     (fun level ->
       let owner, other, sc_wallet = init level in
       let session = new () in
@@ -85,41 +80,41 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
         B.Context.call_as
           owner
           sc_wallet
-          (Set_filter (session.pk, lambda1, time));
+          (Set_condition (session.pk, lambda1, 0x, time));
         let storage = B.Contract.storage_of sc_wallet in
         B.Assert.is_true
           "the session has been registered"
-          (Option.is_some (Big_map.find_opt session.pk storage.registry))
+          (Option.is_some (Big_map.find_opt session.pk storage.conditions))
       ]);
 
   B.Model.case
-    "set_filter_with_signature"
-    "registers a filter and a session key when correctly signed"
+    "set_condition_with_signature"
+    "registers a condition and a session key when correctly signed"
     (fun level ->
       let owner, other, sc_wallet = init level in
       let session = new () in
       let time = Tezos.get_now () + 100 in
-      let packed_data = Bytes.pack (session.pk, lambda1, time) in
+      let packed_data = Bytes.pack (session.pk, lambda1, 0x, time) in
       let signature = Test.Next.Crypto.sign owner.secret packed_data in
       B.Result.reduce [
         B.Context.call_as
           other
           sc_wallet
-          (Set_filter_with_signature (owner.key, packed_data, signature));
+          (Set_condition_with_signature (owner.key, packed_data, signature));
         let storage = B.Contract.storage_of sc_wallet in
         B.Assert.is_true
           "the session has been registered"
-          (Option.is_some (Big_map.find_opt session.pk storage.registry))
+          (Option.is_some (Big_map.find_opt session.pk storage.conditions))
       ]);
 
   B.Model.case
-    "set_filter_with_signature"
+    "set_condition_with_signature"
     "fails when the key provided does not match the owner's"
     (fun level ->
       let owner, other, sc_wallet = init level in
       let session = new () in
       let time = Tezos.get_now () + 100 in
-      let packed_data = Bytes.pack (session.pk, lambda1, time) in
+      let packed_data = Bytes.pack (session.pk, lambda1, 0x, time) in
       let signature = Test.Next.Crypto.sign owner.secret packed_data in
       B.Result.reduce [
         B.Expect.fail_with_message
@@ -127,17 +122,17 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
           (B.Context.call_as
             other
             sc_wallet
-            (Set_filter_with_signature (other.key, packed_data, signature)));
+            (Set_condition_with_signature (other.key, packed_data, signature)));
       ]);
 
   B.Model.case
-    "set_filter_with_signature"
+    "set_condition_with_signature"
     "fails when the packed data is not signed by the owner"
     (fun level ->
       let owner, other, sc_wallet = init level in
       let session = new () in
       let time = Tezos.get_now () + 100 in
-      let packed_data = Bytes.pack (session.pk, lambda1, time) in
+      let packed_data = Bytes.pack (session.pk, lambda1, 0x, time) in
       let signature = Test.Next.Crypto.sign other.secret packed_data in
       B.Result.reduce [
         B.Expect.fail_with_message
@@ -145,7 +140,7 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
           (B.Context.call_as
             other
             sc_wallet
-            (Set_filter_with_signature (owner.key, packed_data, signature)));
+            (Set_condition_with_signature (owner.key, packed_data, signature)));
       ]);
 
   B.Model.case
@@ -162,7 +157,7 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
         B.Context.call_as
           owner
           sc_wallet
-          (Set_filter (session.pk, lambda2, time));
+          (Set_condition (session.pk, lambda2, 0x, time));
         B.Context.call_as
           owner
           sc_wallet
@@ -185,7 +180,7 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
         B.Context.call_as
           owner
           sc_wallet
-          (Set_filter (session.pk, lambda2, expiration_time));
+          (Set_condition (session.pk, lambda2, 0x, expiration_time));
         B.Context.wait_for 100n;
         B.Expect.fail_with_message
           "This session has expired"

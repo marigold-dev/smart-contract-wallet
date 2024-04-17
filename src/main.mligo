@@ -1,4 +1,3 @@
-
 (* POC smart contract wallet
  *
  * Design considerations:
@@ -11,15 +10,26 @@
  *   wallet is shared between different dapps
 *)
 
-(* User filters, or conditions, expect bytes, as we don't know beforehand the type
- of the entrypoints of other contracts. *)
-(* TODO: extendable conditions, storage *)
-type user_filter = bytes -> operation list
+(* User conditions, expect bytes, as we don't know beforehand the type
+   of the entrypoints of other contracts. *)
+
+module Condition_storage = struct
+  type t = bytes
+end
+
+type user_condition = bytes -> Condition_storage.t -> operation list * Condition_storage.t
+
+(* Direct actions, sent by the user to the wallet *)
 type user_action = unit -> operation list
 
 type storage = {
   owner: address;
-  registry: (key, user_filter * timestamp) big_map;
+  conditions: (key, user_condition * Condition_storage.t * timestamp) big_map;
+}
+
+let empty_storage owner : storage = {
+  owner = owner;
+  conditions = Big_map.empty;
 }
 
 [@inline]
@@ -34,13 +44,13 @@ let key_to_address (pk: key): address =
   Tezos.address (Tezos.implicit_account (Crypto.hash_key pk))
 
 [@entry]
-let set_filter
-  (k, f, t: key * user_filter * timestamp)
+let set_condition
+  (key, condition, initial_storage, t: key * user_condition * Condition_storage.t * timestamp)
   (storage: storage): operation list * storage =
   let _ = assert_owner storage in
   let storage = {
     storage with
-      registry = Big_map.add k (f, t) storage.registry;
+      conditions = Big_map.add key (condition, initial_storage, t) storage.conditions;
   }
   in
   [], storage
@@ -48,20 +58,20 @@ let set_filter
 (* This entrypoint may be called by a different sender than the owner, hence
    the session key must be part of the signed bytes *)
 [@entry]
-let set_filter_with_signature
-  (owner_key, packed_filter, s: key * bytes * signature)
+let set_condition_with_signature
+  (owner_key, packed_condition, s: key * bytes * signature)
   (storage: storage): operation list * storage =
-  match (Bytes.unpack packed_filter: (key * user_filter * timestamp) option) with
+  match (Bytes.unpack packed_condition: (key * user_condition * Condition_storage.t * timestamp) option) with
     | None -> failwith "Wrong bytes"
-    | Some (session_key, f, t) ->
-      if not (Crypto.check owner_key s packed_filter) then
+    | Some (session_key, condition, initial_storage, t) ->
+      if not (Crypto.check owner_key s packed_condition) then
         failwith "Wrong signature"
       else if key_to_address owner_key <> storage.owner then
         failwith "The key does not match the owner"
       else
         let storage = {
           storage with
-            registry = Big_map.add session_key (f, t) storage.registry;
+            conditions = Big_map.add session_key (condition, initial_storage, t) storage.conditions;
         }
         in
         [], storage
@@ -72,15 +82,20 @@ let set_filter_with_signature
 let relay_check
   (key, signature, packed_ops: key * signature * bytes)
   (storage: storage): operation list * storage =
-  match Big_map.find_opt key storage.registry with
+  match Big_map.find_opt key storage.conditions with
     | None -> failwith "Session not found"
-    | Some (f, t) ->
+    | Some (condition, condition_storage, t) ->
       if Tezos.get_now () > t then
         failwith "This session has expired"
       else if not (Crypto.check key signature packed_ops) then
         failwith "Wrong signature"
       else
-        let ops = f packed_ops in
+        let ops, new_storage = condition packed_ops condition_storage in
+        let storage = {
+          storage with
+            conditions = Big_map.update key (Some (condition, new_storage, t)) storage.conditions
+        }
+        in
         ops, storage
 
 (* Directly relay a lambda from the user. *)
