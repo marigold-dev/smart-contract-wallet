@@ -1,5 +1,6 @@
 #import "ligo-breathalyzer/lib/lib.mligo" "B"
 #import "../src/main.mligo" "Main"
+#import "./exemple2.mligo" "Ex2"
 
 let originate_empty level owner =
   B.Contract.originate
@@ -14,53 +15,30 @@ let init level =
   let contract = originate_empty level owner.address in
   owner, other, contract
 
+let assume (type a) bytes : a = match (Bytes.unpack bytes : a option) with
+  | None -> failwith "Assertion error: wrong type"
+  | Some x -> x
+
 let lambda1 : Main.user_condition = fun _ -> fun x -> [], x
+let lambda2 : Main.user_condition = Ex2.user_condition
 
-module Ex2 = struct
-  module Contract = struct
-    type storage = int
+module Unit_contract = struct
+  type storage = unit
 
-    [@entry]
-    let foo (_: string) storage: operation list * storage =
-      [], storage + 1
-
-    [@entry]
-    let bar (_: int) storage: operation list * storage =
-      [], storage - 1
-  end
-
-  type entrypoints = Contract parameter_of
-
-  let hd (type a) (xs: a list) =
-    match xs with
-      | [] -> failwith "List.hd"
-      | x::_xs -> x
-
-  let foo s = Foo s
-
-  let user_condition bytes (storage: bytes) =
-    match (Bytes.unpack bytes: (address * entrypoints * nat) list option) with
-      | None -> failwith "big mistake"
-      | Some serialized_ops ->
-        let (addr, entry, n) = hd serialized_ops in
-        let contract = (Tezos.get_contract addr: entrypoints contract) in
-        [Tezos.transaction entry (n * 1mutez) contract], storage
-
-  let make_bytes1 (contract: entrypoints contract) =
-    let address = Tezos.address contract in
-    Bytes.pack [(address, Foo "foo", 0n)]
-
-  let originate_example level =
-    let empty_storage: Contract.storage = 0 in
-    B.Contract.originate
-      level
-      "example_contract"
-      (contract_of Contract)
-      empty_storage
-      (0tez)
+  [@entry]
+  let a () s : operation list * storage =
+    [], s
 end
 
-let lambda2 = Ex2.user_condition
+let lambda3 : Main.user_condition =
+  fun packed_op storage ->
+    let i = (assume storage : int) in
+    if i < 3 then
+      let ops = (assume packed_op : unit Main.serialized_ops) in
+      let ops = List.map Main.transaction ops in
+      ops, Bytes.pack (i+1)
+    else
+      failwith "This has been called too many times"
 
 (* Remove this when Test.Next.Account.new is fixed *)
 let new (() : unit) =
@@ -145,7 +123,7 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
 
   B.Model.case
     "relay_check"
-    "succeeds in calling another contract when the condition is right"
+    "succeeds in calling another contract when the condition succeeds"
     (fun level ->
       let owner, other, sc_wallet = init level in
       let example_contract = Ex2.originate_example level in
@@ -164,6 +142,35 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
           (Relay_check (session.pk, signature, byts));
         let storage = B.Contract.storage_of example_contract in
         B.Assert.is_equal "storage has been modified" storage 1
+      ]);
+
+  B.Model.case
+    "relay_check"
+    "successfully updates the storage when the condition returns a new storage"
+    (fun level ->
+      let owner, other, sc_wallet = init level in
+      let example_contract =
+        B.Contract.originate level "example3" (contract_of Unit_contract) () 0tez
+      in
+      let empty_ops = Bytes.pack ([] : (address * (Unit_contract parameter_of) * nat) list) in
+      let session = new () in
+      let signature = Test.Next.Crypto.sign session.sk empty_ops in
+      B.Result.reduce [
+        let time = Tezos.get_now () + 100 in
+        B.Context.call_as
+          owner
+          sc_wallet
+          (Set_condition (session.pk, lambda3, (Bytes.pack 0), time));
+        B.Context.call_as
+          owner
+          sc_wallet
+          (Relay_check (session.pk, signature, empty_ops));
+        let storage = B.Contract.storage_of sc_wallet in
+        B.Assert.is_some_and
+          "condition storage has been modified"
+          (fun (_, condition_storage, _) ->
+            B.Assert.is_equal "equal to 1" condition_storage (Bytes.pack 1))
+          (Big_map.find_opt session.pk storage.conditions)
       ]);
 
   B.Model.case

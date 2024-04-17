@@ -22,6 +22,14 @@ type user_condition = bytes -> Condition_storage.t -> operation list * Condition
 (* Direct actions, sent by the user to the wallet *)
 type user_action = unit -> operation list
 
+type 'a serialized_op = address * 'a * nat
+type 'a serialized_ops = 'a serialized_op list
+
+let transaction (type a) (op: (address * a * nat)) =
+  let (address, entrypoint, amount) = op in
+  let contract = (Tezos.get_contract address: a contract) in
+  Tezos.transaction entrypoint (amount * 1mutez) contract
+
 type storage = {
   owner: address;
   conditions: (key, user_condition * Condition_storage.t * timestamp) big_map;
