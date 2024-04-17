@@ -51,19 +51,9 @@ module Ex2 = struct
         let contract = (Tezos.get_contract addr: entrypoints contract) in
         [Tezos.transaction entry (n * 1mutez) contract]
 
-  let user_direct addr () =
-    let contract = (Tezos.get_contract addr: entrypoints contract) in
-    [Tezos.transaction (Bar 5) 0tez contract]
-
   let make_bytes1 (contract: entrypoints contract) =
     let address = Tezos.address contract in
     Bytes.pack [(address, Foo "foo", 0n)]
-
-  (* FIXME not sure why this is needed but I couldn't do it outside of the module *)
-  let call_contract originated_address : operation list =
-    let entry = Bar 5 in
-    let (contract : entrypoints contract) = Tezos.get_contract originated_address in
-    [Tezos.transaction entry 0tez contract]
 
   let originate_example level =
     let empty_storage: Contract.storage = 0 in
@@ -207,21 +197,52 @@ let suite = B.Model.suite "Suite for Ligo wallet sessions" [
         B.Assert.is_equal "storage has not been modified" storage 0
       ]);
 
+
   B.Model.case
     "relay_direct"
     "succeeds when called by the owner of the wallet"
     (fun level ->
       let owner, other, sc_wallet = init level in
       let example_contract = Ex2.originate_example level in
+      let addr = Tezos.address example_contract.originated_contract in
       B.Result.reduce [
         B.Context.call_as
           owner
           sc_wallet
-          (Relay_direct (Ex2.user_direct example_contract.originated_address));
+          (Relay_direct
+            (fun () ->
+              let entry = Bar 5 in
+              let (contract: (Ex2.Contract parameter_of) contract) =
+                Tezos.get_contract addr
+              in
+              [Tezos.transaction entry 0tez contract]
+            ));
         let storage = B.Contract.storage_of example_contract in
         B.Assert.is_equal "storage has been modified" storage (-1)
       ]);
 
+  B.Model.case
+    "relay_direct"
+    "fails when called by another user"
+    (fun level ->
+      let owner, other, sc_wallet = init level in
+      let example_contract = Ex2.originate_example level in
+      let addr = Tezos.address example_contract.originated_contract in
+      B.Result.reduce [
+        B.Expect.fail_with_message
+          "Not the owner"
+          (B.Context.call_as
+            other
+            sc_wallet
+            (Relay_direct
+              (fun () ->
+                let entry = Bar 5 in
+                let (contract: (Ex2.Contract parameter_of) contract) =
+                  Tezos.get_contract addr
+                in
+                [Tezos.transaction entry 0tez contract]
+              )))
+      ]);
 ]
 
 let () =
