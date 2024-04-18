@@ -1,11 +1,16 @@
 #import "ligo-breathalyzer/lib/lib.mligo" "B"
 #import "../src/main.mligo" "Main"
+#include "./common.mligo"
 
-let assume (type a) option : a = match option with
-  | None -> failwith "Assertion error: wrong type"
-  | Some x -> x
+module TestContract1 = struct
+  type storage = unit
 
-module Contract = struct
+  [@entry]
+  let a () s : operation list * storage =
+    [], s
+end
+
+module TestContract2 = struct
   type storage = int
 
   [@entry]
@@ -17,7 +22,7 @@ module Contract = struct
     [], storage - 1
 end
 
-type entrypoints = Contract parameter_of
+type entrypoints = TestContract2 parameter_of
 
 let hd (type a) (xs: a list) =
   match xs with
@@ -27,7 +32,7 @@ let hd (type a) (xs: a list) =
 let foo s = Foo s
 
 let user_condition bytes (storage: bytes) =
-  let serialized_ops = assume (Bytes.unpack bytes : entrypoints Main.serialized_ops option) in
+  let serialized_ops = (assume bytes : entrypoints Main.serialized_ops) in
   let ops = List.map Main.transaction serialized_ops in
   ops, storage
 
@@ -36,10 +41,12 @@ let make_bytes1 (contract: entrypoints contract) =
   Bytes.pack [(address, Foo "foo", 0n)]
 
 let originate_example level =
-  let empty_storage: Contract.storage = 0 in
+  let empty_storage: TestContract2.storage = 0 in
   B.Contract.originate
     level
     "example_contract"
-    (contract_of Contract)
+    (contract_of TestContract2)
     empty_storage
     (0tez)
+
+

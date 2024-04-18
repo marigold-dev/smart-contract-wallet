@@ -28,7 +28,7 @@ type 'a serialized_ops = 'a serialized_op list
 let transaction (type a) (op: (address * a * nat)) =
   let (address, entrypoint, amount) = op in
   let contract = (Tezos.get_contract address: a contract) in
-  Tezos.transaction entrypoint (amount * 1mutez) contract
+  Tezos.Next.Operation.transaction entrypoint (amount * 1mutez) contract
 
 type storage = {
   owner: address;
