@@ -3,10 +3,10 @@
 #include "./test_contracts.mligo"
 #include "./common.mligo"
 
-let lambda1 : Main.user_condition = fun _ -> fun x -> [], x
+let lambda1 : Main.user_condition = fun (_, x) -> [], x
 let lambda2 : Main.user_condition = user_condition
 let lambda3 : Main.user_condition =
-  fun packed_op storage ->
+  fun (packed_op, storage) ->
     let i = (assume storage : int) in
     if i < 3 then
       let ops = (assume packed_op : unit Main.serialized_ops) in

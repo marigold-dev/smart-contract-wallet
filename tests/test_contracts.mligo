@@ -31,7 +31,7 @@ let hd (type a) (xs: a list) =
 
 let foo s = Foo s
 
-let user_condition bytes (storage: bytes) =
+let user_condition (bytes, storage: bytes * bytes) =
   let serialized_ops = (assume bytes : entrypoints Main.serialized_ops) in
   let ops = List.map Main.transaction serialized_ops in
   ops, storage

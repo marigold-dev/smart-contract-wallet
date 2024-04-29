@@ -17,7 +17,7 @@ module Condition_storage = struct
   type t = bytes
 end
 
-type user_condition = bytes -> Condition_storage.t -> operation list * Condition_storage.t
+type user_condition = bytes * Condition_storage.t -> operation list * Condition_storage.t
 
 (* Direct actions, sent by the user to the wallet *)
 type user_action = unit -> operation list
@@ -98,7 +98,7 @@ let relay_check
       else if not (Crypto.check key signature packed_ops) then
         failwith "Wrong signature"
       else
-        let ops, new_storage = condition packed_ops condition_storage in
+        let ops, new_storage = condition (packed_ops, condition_storage) in
         let storage = {
           storage with
             conditions = Big_map.update key (Some (condition, new_storage, t)) storage.conditions
