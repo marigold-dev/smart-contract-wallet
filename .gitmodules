@@ -1,0 +1,3 @@
+[submodule "ligo-fa"]
+	path = ligo-fa
+	url = git@github.com:aguillon/ligo-fa2.git

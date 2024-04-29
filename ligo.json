@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "dependencies": {
     "ligo-breathalyzer": "1.7.0",
-    "@ligo/fa": "1.3.0"
+    "@ligo/fa": "1.4.2"
   },
   "repository": {
     "type": "git",

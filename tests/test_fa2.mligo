@@ -1,5 +1,5 @@
 #import "ligo-breathalyzer/lib/lib.mligo" "B"
-#import "@ligo/fa/lib/main.mligo" "FA2"
+#import "../ligo-fa/lib/main.mligo" "FA2"
 #import "../src/main.mligo" "SC"
 #include "./common.mligo"
 
@@ -45,18 +45,14 @@ let spending_limit (fa2_address : address) : SC.user_condition =
     let head : FA2 parameter_of = Update_operators [(assume head : FA2.TZIP12.unit_update)] in
     let tail : FA2 parameter_of = Update_operators [(assume tail : FA2.TZIP12.unit_update)] in
     let hearts : FA2 parameter_of = Transfer (List.map (fun x -> (assume x : FA2.TZIP12.transfer_from)) hearts) in
-  (*
-    (*
     let operations =
       List.map
         (fun entrypoint ->
+         let contract = (Tezos.get_contract fa2_address : FA2 parameter_of contract) in
          Tezos.Next.Operation.transaction entrypoint 0tez contract)
         [head; hearts; tail]
     in
-    *)
-  *)
-    let ops = List.map SC.transaction [(fa2_address, head, 0n)] in
-    ops, Bytes.pack counter
+    operations, Bytes.pack counter
 
 let suite = B.Model.suite "Advanced tests for conditions on FA2 contracts" [
 
@@ -93,7 +89,6 @@ let suite = B.Model.suite "Advanced tests for conditions on FA2 contracts" [
       in
       let serialized_transfer = Bytes.pack (sequence) in
       let signature = Test.Next.Crypto.sign session.sk serialized_transfer in
-      let lambda1 : SC.user_condition = fun (_, x) -> [], x in
       B.Result.reduce [
         B.Context.call_as
           owner
